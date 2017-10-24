@@ -1,0 +1,609 @@
+<html><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<title>Box Spinner ULTIMATE</title>
+</head>
+
+<body style="padding: 0px; margin: 0px">
+<canvas id="canvas" style="padding: 0px; margin: 0px" width="1557" height="829">
+
+
+
+<script>
+
+
+//Boring matrix math
+function newMat()
+{
+	return [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0];
+}
+
+function newMatIdentity()
+{
+	return [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1];
+}
+
+
+function matPos(x, y)
+{
+	return x + y * 4;
+}
+
+//The art of 4x4 matrix multiplication
+function matMul(mat1, mat2)
+{
+	let mat3 = newMat();
+	for (let x = 0; x < 4; x++)
+	{
+		for (let y = 0; y < 4; y++)
+		{
+			mat3[matPos(x,y)] = 0;
+			for (let o = 0; o < 4; o++)
+			{
+				mat3[matPos(x,y)] += mat1[matPos(o, y)] * mat2[matPos(x, o)];
+			}
+		}
+	}
+	return mat3;
+}
+
+//Perspective projection matrix
+function matPerspective(width, height, far, near, fov)
+{
+	let mat = newMatIdentity()
+    let ratio = width / height;
+    let vert = 1 / Math.tan(0.5 * fov);
+
+    mat[matPos(0, 0)] = vert / ratio;
+    mat[matPos(1, 0)] =0;
+    mat[matPos(2, 0)] =0;
+    mat[matPos(3, 0)] =0;
+
+    mat[matPos(0, 1)] =0;
+    mat[matPos(1, 1)] =vert;
+    mat[matPos(2, 1)] =0;
+    mat[matPos(3, 1)] =0;
+
+    mat[matPos(0, 2)] =0;
+    mat[matPos(1, 2)] =0;
+    mat[matPos(2, 2)] =far/(far-near);
+    mat[matPos(3, 2)] =1;
+
+    mat[matPos(0, 3)] =0;
+    mat[matPos(1, 3)] =0;
+    mat[matPos(2, 3)] =-(far*near)/(far-near);
+    mat[matPos(3, 3)] =0;
+
+    return mat;
+}
+
+//Translation
+function matTranslate(x, y, z)
+{
+	let mat = newMatIdentity();
+	mat[matPos(0, 3)] = x;
+	mat[matPos(1, 3)] = y;
+	mat[matPos(2, 3)] = z;
+	return mat;
+
+}
+
+//Scaling matrix
+function matScale(sx, sy, sz)
+{
+	let mat = newMatIdentity();
+	mat[matPos(0, 0)] = sx;
+	mat[matPos(1, 1)] = sy;
+	mat[matPos(2, 2)] = sz;
+	return mat;
+}
+
+//Rotation matrice
+
+function matRotX(angle)
+{
+	let mat = newMatIdentity();
+	mat[matPos(1, 1)] = Math.cos(angle);
+	mat[matPos(2, 1)] = -Math.sin(angle);
+	mat[matPos(1, 2)] = Math.sin(angle);
+	mat[matPos(2, 2)] = Math.cos(angle);
+	return mat;
+}
+
+function matRotY(angle)
+{
+	let mat = newMatIdentity();
+	mat[matPos(0, 0)] = Math.cos(angle);
+	mat[matPos(2, 0)] = Math.sin(angle);
+	mat[matPos(0, 2)] = -Math.sin(angle);
+	mat[matPos(2, 2)] = Math.cos(angle);
+	return mat;
+}
+
+function matRotZ(angle)
+{
+	let mat = newMatIdentity();
+	mat[matPos(0, 0)] = Math.cos(angle);
+	mat[matPos(1, 0)] = -Math.sin(angle);
+	mat[matPos(0, 1)] = Math.sin(angle);
+	mat[matPos(1, 1)] = Math.cos(angle);
+	return mat;
+}
+
+//Hardcoded shaders
+
+let fragShader = `
+precision mediump float;
+
+varying vec3 f_Pos;
+varying vec2 f_Fog;
+
+
+float closest(vec3 pos)
+{
+	
+	float cl = 10.0;
+	float ncl = 10.0;
+	float diff = 0.0;
+	ncl = min(cl, distance(pos, vec3(0.4,0.1,0.1))); diff = mix(cl - ncl, diff, step(0.0, - (cl - ncl))); cl = ncl;
+	ncl = min(cl, distance(pos, vec3(0.8,-0.2,-0.2))); diff = mix(cl - ncl, diff, step(0.0, - (cl - ncl))); cl = ncl;
+	ncl = min(cl, distance(pos, vec3(0.3,-0.4,0.6))); diff = mix(cl - ncl, diff, step(0.0, - (cl - ncl))); cl = ncl;
+	ncl = min(cl, distance(pos, vec3(0.0,0.5,-0.9))); diff = mix(cl - ncl, diff, step(0.0, - (cl - ncl))); cl = ncl;
+	ncl = min(cl, distance(pos, vec3(-0.5,-0.2,0.3))); diff = mix(cl - ncl, diff, step(0.0, - (cl - ncl))); cl = ncl;
+	ncl = min(cl, distance(pos, vec3(-0.2,-0.5,-0.7))); diff = mix(cl - ncl, diff, step(0.0, - (cl - ncl))); cl = ncl;
+	ncl = min(cl, distance(pos, vec3(-0.9,0.8,0.5))); diff = mix(cl - ncl, diff, step(0.0, - (cl - ncl))); cl = ncl;
+	ncl = min(cl, distance(pos, vec3(-0.4,0.3,-0.5))); diff = mix(cl - ncl, diff, step(0.0, - (cl - ncl))); cl = ncl;
+	return diff;
+}
+
+void main(void)
+{
+	vec3 col = (vec3(f_Pos * 2.0 - f_Fog.y * 0.5 ) + 4.3) / 4.3;
+	float steps = -0.9 - (f_Fog.x / 6.0 - 0.25) * 0.5;
+	vec3 stepper = step(steps, f_Pos) + step(steps, 0.0 - f_Pos);
+	float stepv = step(5.0, stepper.r + stepper.g + stepper.b) ;
+
+	stepv = step(1.0 + steps, closest(f_Pos)) * stepv;
+	float stepratio = clamp(1.0 - stepv, 0.0, 0.7);
+
+	vec3 bordercol = vec3(0.1);
+	col = mix(col, bordercol, stepratio);
+	
+	float ratio = pow(f_Fog.y / 3.0, 3.0);
+	ratio = smoothstep(0.1, 1.4, ratio);
+
+	
+
+	col = smoothstep(0.2, 0.21, col)*0.3
+		+ smoothstep(0.6, 0.62, col)*0.3
+		+ smoothstep(0.9, 0.91, col)*0.4 + col * 4.0;
+
+	vec3 fogcol = vec3(col.x + col.y + col.z) / 2.0;
+	fogcol = fogcol * vec3(0.6, 0.5,0.3);
+	
+	
+	col = col / 6.0 +fogcol * ratio * 0.2;
+    gl_FragColor.rgb = col;
+    gl_FragColor.a = 1.0;
+}
+`
+
+let vertShader = `
+attribute vec3 v_Position;
+
+uniform mat4 u_View;
+uniform mat4 u_Model;
+
+varying vec3 f_Pos;
+varying vec2 f_Fog;
+
+void main(void)
+{
+	vec4 pos = u_View * u_Model * vec4(v_Position, 1.0);
+    gl_Position = pos;
+    f_Pos = v_Position;
+    f_Fog = pos.zw;
+}
+`
+
+
+let mainShader = null;
+let gl = null;
+let boxBuffer = null;
+let boxBufferVertices = 36;
+let boxRotX = 0;
+let boxRotY = 0;
+let boxRotZ = 0;
+let fovM = 1.8;
+let fovVel = 0.0
+let boxMatrix = newMatIdentity();
+let rotVelX = 0.0;
+let rotVelY = 0.0;
+let rotVelZ = 0.0;
+//boxMatrix = matMul(matRotZ(1.2), boxMatrix)
+//boxMatrix = matMul(matRotY(1.2), boxMatrix)
+
+function loadShader(vert, frag)
+{
+	let sfrag = gl.createShader(gl.FRAGMENT_SHADER);
+	gl.shaderSource(sfrag, frag);
+	gl.compileShader(sfrag);
+	if (!gl.getShaderParameter(sfrag, gl.COMPILE_STATUS))
+	{
+        console.log(gl.getShaderInfoLog(sfrag));
+    }
+    let svert = gl.createShader(gl.VERTEX_SHADER);
+	gl.shaderSource(svert, vert);
+	gl.compileShader(svert);
+	if (!gl.getShaderParameter(svert, gl.COMPILE_STATUS))
+	{
+        console.log(gl.getShaderInfoLog(svert));
+    }
+	let prog = gl.createProgram();
+	gl.attachShader(prog, svert);
+	gl.attachShader(prog, sfrag);
+	gl.linkProgram(prog);
+
+	let shaderUniforms = 
+	{
+		"model":"u_Model",
+		"view":"u_View",
+	};
+
+
+
+	let shaderAttributes = 
+	{
+		"position":"v_Position",
+	};
+
+	let uniforms = {};
+	let attributes = {};
+
+	for (var key in shaderUniforms)
+	{
+	    if (!shaderUniforms.hasOwnProperty(key))
+	    	continue;
+
+	    uniforms[key] = gl.getUniformLocation(prog, shaderUniforms[key]);
+	}
+
+	for (var key in shaderAttributes)
+	{
+	    if (!shaderAttributes.hasOwnProperty(key))
+	    	continue;
+
+	    attributes[key] = gl.getAttribLocation(prog, shaderAttributes[key]);
+	}
+
+	return {program: prog, uniforms: uniforms, attributes: attributes};
+
+}
+
+function updateViewport()
+{
+	gl.viewport(0, 0, canvas.width, canvas.height);
+}
+
+function startGraphics()
+{
+	drawables = [];
+	gl = canvas.getContext("webgl");
+	boxBuffer = gl.createBuffer();
+
+	gl.bindBuffer(gl.ARRAY_BUFFER, boxBuffer);
+    let vertices =
+    [
+    	1.0, 1.0, 1.0,
+    	-1.0, 1.0, 1.0,
+    	1.0, -1.0, 1.0,
+
+    	-1.0, 1.0, 1.0,
+    	1.0, -1.0, 1.0,
+    	-1.0, -1.0, 1.0,
+
+    	1.0, -1.0, 1.0,
+    	-1.0, -1.0, 1.0,
+    	1.0, -1.0, -1.0,
+
+    	-1.0, -1.0, 1.0,
+    	1.0, -1.0, -1.0,
+    	-1.0, -1.0, -1.0,
+
+    	1.0, 1.0, -1.0,
+    	-1.0, 1.0, -1.0,
+    	1.0, -1.0, -1.0,
+
+    	-1.0, 1.0, -1.0,
+    	1.0, -1.0, -1.0,
+    	-1.0, -1.0, -1.0,
+
+    	1.0, 1.0, 1.0,
+    	-1.0, 1.0, 1.0,
+    	1.0, 1.0, -1.0,
+
+    	-1.0, 1.0, 1.0,
+    	1.0, 1.0, -1.0,
+    	-1.0, 1.0, -1.0,
+
+    	1.0, 1.0, 1.0,
+    	1.0, -1.0, 1.0,
+    	1.0, 1.0, -1.0,
+
+    	1.0, -1.0, 1.0,
+    	1.0, 1.0, -1.0,
+    	1.0, -1.0, -1.0,
+
+
+    	-1.0, 1.0, 1.0,
+    	-1.0, -1.0, 1.0,
+    	-1.0, 1.0, -1.0,
+
+    	-1.0, -1.0, 1.0,
+    	-1.0, 1.0, -1.0,
+    	-1.0, -1.0, -1.0,
+
+    ];
+
+
+
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+    gl.clearColor(0.2,0.2,0.2,1);
+    gl.disable(gl.CULL_FACE);
+    gl.enable(gl.DEPTH_TEST);
+
+    mainShader = loadShader(vertShader, fragShader);
+
+	gl.useProgram(mainShader.program);
+
+	gl.bindBuffer(gl.ARRAY_BUFFER, boxBuffer);
+    let vt = mainShader.attributes["position"];
+    if (vt >= 0)
+		gl.vertexAttribPointer(vt, 3, gl.FLOAT, false, 3 * 4, 0);
+    gl.enableVertexAttribArray(vt);
+}
+
+
+function drawCube()
+{
+	
+	let fov = fovM;
+	
+	let dpiScale = canvas.height / 2800;
+
+	let perspectiveMat = matPerspective(canvas.width, canvas.height, 10, 0.01, fov);
+	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+	gl.uniformMatrix4fv(mainShader.uniforms["view"], false, perspectiveMat);
+
+
+
+	let model = matMul(matRotZ(boxRotZ), boxMatrix)
+	model = matMul(model, matTranslate(0, 0, 3.0));
+	
+
+	gl.uniformMatrix4fv(mainShader.uniforms["model"], false, model);
+    gl.drawArrays(gl.TRIANGLES, 0, boxBufferVertices);
+
+    //If there are exactly two touches, do some special math
+    if (totalTouches == 2)
+    {
+    	let velX = []
+    	let velY = []
+
+    	let posX = []
+    	let posY = []
+    	for (var k in touches)
+    	{
+    		velX.push(touches[k].velX);
+    		velY.push(touches[k].velY);
+
+    		posX.push(touches[k].x);
+    		posY.push(touches[k].y);
+    	}
+
+    	//Do some maths
+
+    	let lenVel0 = Math.hypot(velX[0], velY[0])
+    	let lenVel1 = Math.hypot(velX[1], velY[1])
+    	let avgLen = (lenVel1 + lenVel0) / 2.0;
+    	let avgVelX = (velX[0] + velX[1]) / 2.0;
+    	let avgVelY = (velY[0] + velY[1]) / 2.0;
+
+    	let dot = velX[0] * velX[1] + velY[0] * velY[1];
+
+    	let diffX = posX[1] - posX[0] 
+    	let diffY = posY[1] - posY[0] 
+
+    	let lenDiff = Math.hypot(diffX, diffY)
+
+    	let diff0Dot = velX[0] * diffX + velY[0] * diffY;
+    	let diff1Dot = velX[1] * (-diffX) + velY[1] * (-diffY);
+
+    	fovVel = 0.0;
+    	rotVelX = 0.0;
+    	rotVelY = 0.0;
+    	rotVelZ = 0.0;
+
+    	//Two finger slide
+    	if (lenVel0 != 0 && lenVel1 != 0)
+    	{
+    		let dotNorm = dot / (lenVel0 * lenVel1)
+
+    		if (dotNorm > 0)
+    		{
+    			let moveX = avgVelX * dotNorm;
+    			let moveY = avgVelY * dotNorm;
+			    moveX /= 600 * dpiScale;
+			    moveY /= 600 * dpiScale;
+
+			    rotVelX = moveX;
+			    rotVelY = moveY;
+    		}
+    	}
+
+    	if (dot < 0)
+    	{
+    		let combDiffDot = diff0Dot + diff1Dot;
+    		if (avgLen > 0.1)
+    		{
+    			//Pinch
+    			fovVel = combDiffDot / ( 100 * avgLen * lenDiff * dpiScale);
+
+
+    			//Swirl/Rotate
+    			let cdot = 0;
+    			let combcross = 0.0;
+
+    			//Calculate the mathematical something:
+    			//combined sines
+
+    			if (lenVel0 > 0)
+    			{
+    				combcross += (diffX * velY[0] - diffY * velX[0]) / (lenVel0 * lenDiff);
+    			}
+
+    			if (lenVel1 > 0)
+    			{
+    				combcross += ((-diffX) * velY[1] - (-diffY) * velX[1]) / (lenVel1 * lenDiff);
+    			}
+
+    			cdot /= 2.0;
+
+    			let mc = -combcross;
+    			rotVelZ = (mc * avgLen) / (400.0);
+    		}
+    	}
+    }
+    else if (totalTouches > 0)
+    {
+    	//On 1, 3 or more touches just average the
+    	//touch velocities
+	    let velX = 0.0;
+	    let velY = 0.0;
+    	for (var k in touches)
+    	{
+    		velX += touches[k].velX;
+    		velY += touches[k].velY;
+    	}
+	    velX /= 600 * dpiScale;
+	    velY /= 600 * dpiScale;
+
+	    rotVelX = velX;
+	    rotVelY = velY;
+    }
+
+	boxMatrix = matMul(boxMatrix, matRotZ(rotVelZ))
+
+	boxMatrix = matMul(boxMatrix, matRotY(rotVelX))
+	boxMatrix = matMul(boxMatrix, matRotX(rotVelY))
+
+
+	rotVelX *= 0.99;
+	rotVelY *= 0.99;
+	rotVelZ *= 0.99;
+
+
+	fovM += fovVel;
+	if (fovM <= 0.5)
+	{
+		fovM = 0.5;
+		fovVel *= -1
+	}
+	if (fovM > 3.1)
+	{
+		fovM = 3.1;
+		fovVel *= -1
+	}
+	fovVel*= 0.99;
+	
+
+}
+
+let canvas = document.getElementById("canvas");
+
+function windowResize()
+{
+	let scale = 1;
+	let body = document.body;
+
+	canvas.width = window.innerWidth;
+	canvas.height = window.innerHeight;
+
+	updateViewport(canvas);
+}
+
+function loop()
+{
+	drawCube();
+
+
+}
+
+
+let totalTouches = 0;
+let touches = {};
+
+function updateTouch(e) {
+	var name = e.identifier.toString();
+	var previous = null;
+	if (touches.hasOwnProperty(name))
+	{
+		previous = touches[name];
+		touches[name] = {"x": e.pageX, "y": e.pageY,
+			"velX": e.pageX - previous.x, "velY" : e.pageY - previous.y};
+	}
+	else
+	{
+		touches[name] = {"x": e.pageX, "y": e.pageY,
+			"velX": 0, "velY" : 0};
+	}
+}
+
+function endTouch(e) {
+	touches[e.identifier.toString()] = null;
+	delete touches[e.identifier.toString()]
+}
+
+
+function move(e) {
+	e.preventDefault();
+	
+	for (var i = 0; i < e.changedTouches.length; i++)
+		updateTouch(e.changedTouches.item(i));
+	totalTouches = e.touches.length;
+}
+
+function start(e) {
+	move(e);
+}
+
+function end(e) {
+	e.preventDefault();
+	for (var i = 0; i < e.changedTouches.length; i++)
+		endTouch(e.changedTouches.item(i));
+	totalTouches = e.touches.length;
+}
+
+function cancel(e) {
+	end(e);
+}
+
+canvas.addEventListener("touchstart", start);
+
+canvas.addEventListener("touchmove", move);
+
+canvas.addEventListener("touchend", end);
+canvas.addEventListener("touchcancel", cancel);
+
+window.addEventListener("resize", windowResize, false);
+
+startGraphics();
+windowResize();
+
+setInterval(loop,17);
+
+</script>
+
+
+
+
+</canvas></body></html>

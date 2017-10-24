@@ -1,0 +1,116 @@
+<html>
+<body style="padding: 0px; margin: 0px">
+<div id="body"  style="padding: 0px; margin: 0px">
+
+<div id="statusDiv" style="font-size: 300%">
+...
+</div>
+<br>
+
+</div>
+
+<script>
+
+//Lists all touches
+
+var movingElement = document.getElementById("moving");
+var statusDiv = document.getElementById("statusDiv");
+
+//the "background"
+var element = document.getElementById("body");
+element.style.width = window.innerWidth;
+element.style.height = window.innerHeight;
+
+//assoc. array of all ongoing touches
+
+var touches = {};
+
+
+//couple of helpers for 2d vectors
+function pointAdd(p1, p2)
+{
+	return {"x": p1.x + p2.x, "y": p1.y + p2.y};
+}
+
+function pointSub(p1, p2)
+{
+	return {"x": p1.x - p2.x, "y": p1.y - p2.y};
+}
+
+
+function getTouchPos(e) {
+	var name = e.identifier.toString();
+	if (touches.hasOwnProperty(name))
+	{
+		return touches[name];
+	}
+	return null;
+}
+
+function update() {
+	
+	var k;
+	var txt = "";
+	for (k in touches)
+	{
+		//touches[k] may be null, check for that
+		if (touches.hasOwnProperty(k) && touches[k])
+		{
+			txt += "Touch "+k+": ("+ Math.floor(touches[k].x) +", "+Math.floor(touches[k].y)+") <br>";
+		}
+	}
+	statusDiv.innerHTML  = txt;
+	
+}
+
+function updateTouch(e) {
+	var name = e.identifier.toString();
+	var previous = null;
+	if (touches.hasOwnProperty(name))
+	{
+		previous = touches[name];
+	}
+	touches[name] = {"x": e.pageX, "y": e.pageY};
+	return previous;
+}
+
+function endTouch(e) {
+	touches[e.identifier.toString()] = null;
+}
+
+
+function move(e) {
+	e.preventDefault();
+	
+	for (var i = 0; i < e.changedTouches.length; i++)
+		updateTouch(e.changedTouches.item(i));
+}
+
+function start(e) {
+	move(e);
+}
+
+function end(e) {
+	e.preventDefault();
+	for (var i = 0; i < e.changedTouches.length; i++)
+		endTouch(e.changedTouches.item(i));
+}
+
+function cancel(e) {
+	end(e);
+}
+
+element.addEventListener("touchstart", start);
+
+element.addEventListener("touchmove", move);
+
+element.addEventListener("touchend", end);
+element.addEventListener("touchcancel", cancel);
+
+
+setInterval(update, 20);
+
+</script>
+</body>
+
+</html>

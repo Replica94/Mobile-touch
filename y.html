@@ -1,0 +1,324 @@
+<html>
+<head>
+<title>Gnome Simulator 3000</title>
+</head>
+
+<body style="padding: 0px; margin: 0px">
+<div id="body"  style="padding: 0px; margin: 0px">
+
+<div id="statusDiv" style="font-size: 300%">
+...
+</div>
+<img id="moving" style="position: fixed; top: 100px; left: 100px;" src="gnome2.png" />
+
+<br>
+</div>
+
+<script>
+
+
+/*
+# Touch
+	
+Touch based input provides new possibilites for user interface
+design. Gestures like "zoom" and "rotate" wouldn't be possible
+with only a single pointer: they require two fingers to communicate
+the "zoom" or "rotate" gesture. As always, using such device
+specific input gestures can be a problem when the user uses other
+input methods. Typically one would detect if the user has a touch
+input available and enable the touch gestures only then. But this
+is not always the solution: sometimes the user has multiple input
+methods, such as a mouse and a touch screen, or the user may switch
+from touch input to mouse input on fly. A portable website should
+support both mouse and touch.
+
+## How touch input differs from mouse input?
+
+ - There can be multiple simultaneous touches
+ - Mouse can be hovered over objects without "a press"
+ - Touch input has surface area falling under the touch unlike
+	mouse, which points to a single point
+
+## Touch getures
+
+ - Tap
+ - Double tap
+ - Swipe
+ - Long press
+ - Rotate
+ - Scale (pinch/expand)
+ - And possibly others
+	
+## HTML5 touch events.
+	
+HTML5 has touch events "touchstart", "touchend", "touchmove" and
+"touchcancel" for handling different phases of the touch. These
+touch events will be generated on touch input only. The mouse 
+events "mousedown", "mouseup", "click" etc. are generated for touch
+events as well, if the preventDefault() isn't used to prevent event
+propagation.
+
+https://developer.mozilla.org/en-US/docs/Web/API/Touch_events
+
+Touch input differs from mouse input quite a bit and this is 
+reflected in the touch events:
+ 
+Touch event support for multiple touches (multi-touch) can be a
+challenge, but multi-touch is useful, sometimes even necessary
+for different touch based widgets. 
+
+Typically one would use a library to handle touch based widgets
+unless you are building some application specific functionality
+e.g a drawing app, bouncing gnome simulator, HTML5 game...
+
+*/
+
+
+//The element that'll be used for capturing events
+var element = document.getElementById("body");
+element.style.width = window.innerWidth;
+element.style.height = window.innerHeight;
+
+
+//Manually updated associative array of all ongoing touches
+
+var touches = {};
+
+
+//Bouncing gnome stuff
+//store the rotation, position, velocity & previous velocity of the bouncing gnome
+var rot = 0;
+var rotPrevious = 0;
+var movingPos = {"x": 100, "y": 100};
+var movingVel = {"x": 0, "y": 0};
+var movingVelPrevious = {"x": 0, "y": 0};
+
+//maximum Y limit for the bouncing gnome
+var limitMaxY = window.innerHeight - 120;
+
+//the anchor point for the rubberbanding gnome
+var center = {"x": window.innerWidth / 2, "y": limitMaxY };
+var movingElement = document.getElementById("moving");
+var statusDiv = document.getElementById("statusDiv");
+
+//lots of bouncing gnome stuff
+
+//couple of helpers for 2d vectors
+function pointAdd(p1, p2)
+{
+	return {"x": p1.x + p2.x, "y": p1.y + p2.y};
+}
+
+function pointSub(p1, p2)
+{
+	return {"x": p1.x - p2.x, "y": p1.y - p2.y};
+}
+
+
+function update() {
+
+	//calculate deltas and other gnome math
+	var delta = pointSub(movingPos, center);
+	
+	//acceleration
+	var len = delta.x * delta.x + delta.y * delta.y;
+	if (len > 20)
+	{	
+		len = Math.pow(len, 0.3);
+		len *= 24
+		delta.x /= len;
+		delta.y /= len;
+		movingVel = pointSub(movingVel, delta);
+	}
+
+	//integrate stuff
+	movingPos = pointAdd(movingPos, movingVel);
+	
+	//bounce
+		
+	if (movingPos.y > limitMaxY)
+	{
+		movingPos.y = limitMaxY;
+		movingVel.y *= -0.50;
+		movingVel.x *= 0.50;
+	}
+	//drag
+	movingVel.x *= 0.99;
+	movingVel.y *= 0.99; 
+	rot *= 0.99;
+
+	//motion blur, use angular velocity for that
+	var angvel = Math.abs(rotPrevious - rot)
+
+	//if absolute angular velocity is greater than X, blur the gnome
+	//'cos its going fast
+	if (angvel > 75 )
+		movingElement.src  = "gnome2blur3.png"
+	else if (angvel > 45 )
+		movingElement.src  = "gnome2blur2.png"
+	else if (angvel > 25 )
+		movingElement.src  = "gnome2blur1.png"
+	else if (angvel > 15 )
+		movingElement.src  = "gnome2blur0.png"
+	else
+		movingElement.src  = "gnome2.png"
+
+	rotPrevious = rot
+
+	//rotate
+	rot += movingVel.x *3;
+
+	//all the html stuff here:
+	//move the gnome element to its new position
+	movingElement.style.left = movingPos.x + "px";
+	movingElement.style.top = movingPos.y + "px";
+	
+	//calculate some fun math for distorting the gnome
+	var acceleration = pointSub(movingVelPrevious, movingVel);
+	
+	var sx = 1 + Math.abs(acceleration.x) * 0.01;
+	var sy = 1 + Math.abs(acceleration.y) * 0.01;
+
+	//distort & rotate the gnome with css transforms
+	movingElement.style.transform = "translate(-50%, -50%) skew("+(acceleration.x / 3) +"deg, "+(acceleration.y / 3)+"deg) scale("+sx+","+sy+") rotate("+rot+"deg)";
+	
+	//display the statistical info about touches
+
+	var k;
+	var txt = "";
+	for (k in touches)
+	{
+		//touches[k] may be null, check for that
+		if (touches.hasOwnProperty(k) && touches[k])
+		{
+			txt += "Touch "+k+": ("+ Math.floor(touches[k].x) +", "+Math.floor(touches[k].y)+") <br>";
+		}
+	}
+
+	//and some other fun info as well
+	txt += "Gnome velocity: ("+ Math.floor(movingVel.x) +", "+Math.floor(movingVel.y)+") <br>";
+	txt += "Gnome position: ("+ Math.floor(movingPos.x) +", "+Math.floor(movingPos.y)+") <br>";
+
+	statusDiv.innerHTML  = txt;
+	
+}
+
+//apply touch movement to gnome
+function applyDeltaToMovingVel(delta)
+{
+	movingVel = pointSub(movingVel, delta);
+}
+
+//gets a touch from the touches array by identifier
+function getTouchPos(e) {
+	var name = e.identifier.toString();
+	if (touches.hasOwnProperty(name))
+	{
+		return touches[name];
+	}
+	return null;
+}
+
+//handle touch movement
+function handleDelta(e) {
+	var previous = getTouchPos(e);
+	
+	if (!previous)
+		return;	
+		
+	var px = previous.x;
+	var py = previous.y;
+	
+	var x = e.pageX;
+	var y = e.pageY;
+	
+	var delta = {"x": px - x, "y": py - y};
+	
+	//multiplier: how much touch affects the gnome velocity
+	delta.x *= 0.1;
+	delta.y *= 0.1;
+	applyDeltaToMovingVel(delta);
+}
+
+//generic helper for the touch event handlers below
+//used to keep track of current touch position
+function updateTouch(e) {
+	handleDelta(e);
+	var name = e.identifier.toString();
+	var previous = null;
+	if (touches.hasOwnProperty(name))
+	{
+		previous = touches[name];
+	}
+	touches[name] = {"x": e.pageX, "y": e.pageY};
+	return previous;
+}
+
+//generic helper for the touch event handlers below
+//used to "terminate" a single touch
+function endTouch(e) {
+	handleDelta(e);
+	touches[e.identifier.toString()] = null;
+}
+
+//actual event handlers
+
+/*
+	The manual tracking of ongoing touches is not necessary as the TouchEvent
+	maintains a list of all touches still on the "touch surface".
+	TouchEvent.changedTouches contains a list of touches that only apply to
+	the current event.
+*/
+
+
+//touchmove
+function move(e) {
+	//call prevent default to prevent default event handlers
+
+	//this effectively prevents user from zooming or scrolling around the
+	//page with touch 
+	e.preventDefault();
+	
+	//update all the changed touches
+	//touchmove event handles multiple touches simultaneously
+	for (var i = 0; i < e.changedTouches.length; i++)
+		updateTouch(e.changedTouches.item(i));
+}
+
+//touchstart
+function start(e) {
+	//just pass to move handler
+	move(e);
+}
+
+//touchend
+function end(e) {
+	e.preventDefault();
+	for (var i = 0; i < e.changedTouches.length; i++)
+		endTouch(e.changedTouches.item(i));
+}
+
+//touchcancel
+
+//if the user "cancels" the touch somehow
+//e.g the user (accidentally) opens the browser popup menu
+function cancel(e) {
+	//just pass to end handler
+	alert("Touch got canceld!")
+	end(e);
+}
+
+//register event handlers
+element.addEventListener("touchstart", start);
+element.addEventListener("touchmove", move);
+element.addEventListener("touchend", end);
+element.addEventListener("touchcancel", cancel);
+
+//set update callback
+
+setInterval(update, 20);
+
+</script>
+</body>
+
+</html>

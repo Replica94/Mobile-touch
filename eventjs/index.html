@@ -1,0 +1,102 @@
+<!doctype html>
+<html>
+<head>
+<meta name="viewport" content="minimum-scale=1.0,maximum-scale=1.0,initial-scale=1.0,user-scalable=no" />
+
+<title>test</title></head>
+<body>
+<a href="https://github.com/mudcube/Event.js"> https://github.com/mudcube/Event.js</a>
+
+<img id="g1" src="../gnome.png" style="position: fixed;"/>
+
+<script src="Event/_event.js" type="text/javascript"></script> 
+<script src="Event/_proxy.js" type="text/javascript"></script> 
+<script src="Event/drag.js" type="text/javascript"></script> 
+<script src="Event/gesture.js" type="text/javascript"></script> 
+<script src="Event/swipe.js" type="text/javascript"></script> 
+<script src="Event/shake.js" type="text/javascript"></script> 
+<script type="text/javascript">
+
+/*
+    Event.js
+    
+    Library for capturing all sorts of different events, including drag, tap,
+    double tap, long tap, pinch and rotate gesture, swiping and others.
+	
+	A relatively low level library, doesn't provide any UI elements or anything.
+	
+
+*/
+
+let g1 = document.getElementById("g1");
+
+let gx = 128;
+let gy = 128;
+let rotation = 0;
+let scale = 1.0;
+
+g1.style.top = gy +  "px";
+g1.style.left = gx +  "px";
+g1.style.transform = "translate(-50%, -50%)";
+    
+eventjs.add(g1, "drag", function(event, self) {
+    let diff_x = self.x - self.start.x;
+    let diff_y = self.y - self.start.y;
+    g1.style.top = gy + diff_y + "px";
+    g1.style.left = gx + diff_x + "px";
+    if (self.state == "up")
+    {
+        gx = gx + diff_x;
+        gy = gy + diff_y;
+    }
+    console.log(self.gesture, self.x, self.y, self.start, self.state, self.fingers);
+    eventjs.cancel(event);
+});
+
+eventjs.add(g1, "gesture", function(event, self) {
+    
+    let rot = self.rotation + rotation;
+    let scl = self.scale * scale;
+    g1.style.transform = "translate(-50%, -50%) scale("+scl+","+scl+") rotate("+rot+"deg)";
+    
+    
+    if (self.state == "end")
+    {
+        rotation = rot;
+        scale = scl;
+    }
+    
+    eventjs.cancel(event);
+});
+
+
+let liteLevel = 250;
+eventjs.add(window, "swipe", function(event, self) {
+    
+    if (self.angle == 90)
+        liteLevel -= 50;
+    else
+    if (self.angle == 270)
+        liteLevel += 50;
+    else
+        
+    if (liteLevel < 0)
+        litelevel = 0;
+    if (liteLevel > 250)
+        liteLevel = 250;
+    document.body.style.backgroundColor = "rgb("+liteLevel+","+liteLevel+","+liteLevel+")";
+    eventjs.cancel(event);
+});
+
+let cnt = 0;
+eventjs.add(window, "shake", function(event, self) {
+
+    cnt += 1;
+    if (cnt <= 1)
+        alert("don't shake the gnome please.");
+    else
+        alert("DO NOT SHAKE THE GNOME!");
+});
+</script>   
+</body>
+</html>
